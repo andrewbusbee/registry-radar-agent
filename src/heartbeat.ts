@@ -19,7 +19,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 // Send heartbeat to server
-async function sendHeartbeat(params: HeartbeatParams): Promise<boolean> {
+async function sendHeartbeat(params: HeartbeatParams): Promise<{ success: boolean; newInterval?: number }> {
   const { serverUrl, accessToken, agentId } = params;
   
   try {
@@ -44,11 +44,17 @@ async function sendHeartbeat(params: HeartbeatParams): Promise<boolean> {
     }, "heartbeat");
 
     console.log(`[heartbeat] Successfully sent heartbeat with ${containers.length} containers`);
-    return true;
+    
+    // Check if server returned a new heartbeat interval
+    if (response.data && response.data.heartbeatIntervalSeconds) {
+      return { success: true, newInterval: response.data.heartbeatIntervalSeconds };
+    }
+    
+    return { success: true };
     
   } catch (error: any) {
     console.error(`[heartbeat] Failed to send heartbeat:`, error.message);
-    return false;
+    return { success: false };
   }
 }
 
@@ -60,40 +66,109 @@ export async function startHeartbeat(params: HeartbeatParams): Promise<void> {
   
   let consecutiveFailures = 0;
   const maxConsecutiveFailures = 5;
+  let currentInterval = 30000; // Default 30 seconds, will be updated by server
+  let heartbeatTimer: NodeJS.Timeout | null = null;
+  
+  // Generate initial jitter offset (0-15 seconds) that will be preserved across interval changes
+  const jitterOffset = Math.floor(Math.random() * 15000); // 0-15 seconds in milliseconds
+  console.log(`[heartbeat] Initial jitter offset: ${jitterOffset}ms (${Math.round(jitterOffset/1000)}s)`);
+  
+  const scheduleNextHeartbeat = (intervalMs: number) => {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+    }
+    
+    // Calculate the next heartbeat time with jitter offset
+    const now = Date.now();
+    const timeSinceLastInterval = now % intervalMs;
+    const timeUntilNextInterval = intervalMs - timeSinceLastInterval;
+    const nextHeartbeatDelay = timeUntilNextInterval + jitterOffset;
+    
+    console.log(`[heartbeat] Scheduling next heartbeat in ${Math.round(nextHeartbeatDelay/1000)}s (interval: ${intervalMs/1000}s + jitter: ${jitterOffset/1000}s)`);
+    
+    // Use setTimeout for the first heartbeat to align with jitter, then setInterval for subsequent ones
+    heartbeatTimer = setTimeout(async () => {
+      // Send the heartbeat
+      const result = await sendHeartbeat(params);
+      
+      if (result.success) {
+        consecutiveFailures = 0;
+        
+        // Check if server sent a new interval
+        if (result.newInterval && result.newInterval !== currentInterval / 1000) {
+          const newIntervalMs = result.newInterval * 1000;
+          console.log(`[heartbeat] Server requested new interval: ${result.newInterval} seconds (was ${currentInterval / 1000} seconds)`);
+          currentInterval = newIntervalMs;
+          scheduleNextHeartbeat(newIntervalMs);
+          return; // Don't set up the interval timer, scheduleNextHeartbeat will handle it
+        }
+      } else {
+        consecutiveFailures++;
+        console.log(`[heartbeat] Heartbeat failed (${consecutiveFailures}/${maxConsecutiveFailures})`);
+        
+        // If too many consecutive failures, try to get a new token
+        if (consecutiveFailures >= maxConsecutiveFailures) {
+          console.log("[heartbeat] Too many consecutive failures, will retry with exponential backoff");
+          consecutiveFailures = 0; // Reset counter
+        }
+      }
+      
+      // Set up the regular interval timer for subsequent heartbeats
+      heartbeatTimer = setInterval(async () => {
+        const result = await sendHeartbeat(params);
+        
+        if (result.success) {
+          consecutiveFailures = 0;
+          
+          // Check if server sent a new interval
+          if (result.newInterval && result.newInterval !== currentInterval / 1000) {
+            const newIntervalMs = result.newInterval * 1000;
+            console.log(`[heartbeat] Server requested new interval: ${result.newInterval} seconds (was ${currentInterval / 1000} seconds)`);
+            currentInterval = newIntervalMs;
+            scheduleNextHeartbeat(newIntervalMs);
+          }
+        } else {
+          consecutiveFailures++;
+          console.log(`[heartbeat] Heartbeat failed (${consecutiveFailures}/${maxConsecutiveFailures})`);
+          
+          // If too many consecutive failures, try to get a new token
+          if (consecutiveFailures >= maxConsecutiveFailures) {
+            console.log("[heartbeat] Too many consecutive failures, will retry with exponential backoff");
+            consecutiveFailures = 0; // Reset counter
+          }
+        }
+      }, intervalMs);
+      
+    }, nextHeartbeatDelay);
+  };
   
   // Send initial heartbeat immediately
   console.log("[heartbeat] Sending initial heartbeat...");
-  const initialSuccess = await sendHeartbeat(params);
-  if (initialSuccess) {
+  const initialResult = await sendHeartbeat(params);
+  if (initialResult.success) {
     consecutiveFailures = 0;
     console.log("[heartbeat] Initial heartbeat successful");
+    
+    // Use server-provided interval if available, otherwise use default
+    if (initialResult.newInterval) {
+      currentInterval = initialResult.newInterval * 1000;
+      console.log(`[heartbeat] Using server-configured interval: ${initialResult.newInterval} seconds`);
+    }
   } else {
     consecutiveFailures++;
     console.log(`[heartbeat] Initial heartbeat failed (${consecutiveFailures}/${maxConsecutiveFailures})`);
   }
   
-  // Set up periodic heartbeat (every 30 seconds)
-  const heartbeatInterval = setInterval(async () => {
-    const success = await sendHeartbeat(params);
-    
-    if (success) {
-      consecutiveFailures = 0;
-    } else {
-      consecutiveFailures++;
-      console.log(`[heartbeat] Heartbeat failed (${consecutiveFailures}/${maxConsecutiveFailures})`);
-      
-      // If too many consecutive failures, try to get a new token
-      if (consecutiveFailures >= maxConsecutiveFailures) {
-        console.log("[heartbeat] Too many consecutive failures, will retry with exponential backoff");
-        consecutiveFailures = 0; // Reset counter
-      }
-    }
-  }, 30000); // 30 seconds
+  // Start periodic heartbeat with current interval
+  scheduleNextHeartbeat(currentInterval);
   
   // Handle graceful shutdown
   process.on('SIGINT', () => {
     console.log("[heartbeat] Shutting down heartbeat service...");
-    clearInterval(heartbeatInterval);
+    if (heartbeatTimer) {
+      clearTimeout(heartbeatTimer);
+      clearInterval(heartbeatTimer);
+    }
     
     // Send final offline heartbeat
     sendHeartbeat({ ...params, status: 'offline' } as any).catch(() => {
@@ -105,7 +180,10 @@ export async function startHeartbeat(params: HeartbeatParams): Promise<void> {
   
   process.on('SIGTERM', () => {
     console.log("[heartbeat] Shutting down heartbeat service...");
-    clearInterval(heartbeatInterval);
+    if (heartbeatTimer) {
+      clearTimeout(heartbeatTimer);
+      clearInterval(heartbeatTimer);
+    }
     
     // Send final offline heartbeat
     sendHeartbeat({ ...params, status: 'offline' } as any).catch(() => {
