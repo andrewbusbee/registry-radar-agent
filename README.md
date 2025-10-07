@@ -90,3 +90,4 @@ This project was developed with the help of **modern AI coding tools** to accele
 - The use of AI enabled faster iteration, architectural clarity, and higher overall quality  
 
 💡 *Community feedback and contributions are encouraged to further enhance this project.*
+
