@@ -1,0 +1,44 @@
+node_modules
+npm-debug.log*
+yarn*.log
+pnpm-lock.yaml
+dist
+.dockerignore
+Dockerfile
+
+# Development and setup files
+.env*
+env.example
+setup.bat
+setup.ps1
+SETUP.md
+docker-compose.yml
+docker-compose.override.yml
+
+# IDE and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+.cache/
+.temp/
+
+# Git files
+.git/
+.gitignore
+
+# Coverage and testing
+coverage/
+.nyc_output/
+
+
+
