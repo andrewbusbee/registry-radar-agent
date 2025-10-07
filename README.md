@@ -2,9 +2,9 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/andrewbusbee/registry-radar-agent?color=4CAF50&label=Release)](https://github.com/andrewbusbee/registry-radar-agent/releases)
 [![Docker Image](https://img.shields.io/docker/pulls/andrewbusbee/registry-radar-agent?color=2496ED&logo=docker&label=Docker)](https://hub.docker.com/r/andrewbusbee/registry-radar-agent)
-[![License](https://img.shields.io/github/license/andrewbusbee/registry-radar-agent?color=blue)](./LICENSE)
+[![License](https://img.shields.io/github/license/andrewbusbee/registry-radar-agent?color=blue)](https://github.com/andrewbusbee/registry-radar-agent/blob/main/LICENSE)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/andrewbusbee/registry-radar-agent/docker-build.yml?label=Build&logo=githubactions)](https://github.com/andrewbusbee/registry-radar-agent/actions)
-[![Code Style](https://img.shields.io/badge/code%20style-prettier-ff69b4.svg)](https://prettier.io/)
+
 
 > A lightweight companion service for **[Registry Radar](https://github.com/andrewbusbee/registry-radar)** that extends its monitoring reach across remote hosts.
 
