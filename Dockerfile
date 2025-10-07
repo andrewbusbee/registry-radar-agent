@@ -13,7 +13,7 @@ WORKDIR /app
 COPY --from=builder /app/package*.json ./
 RUN npm install --omit=dev && npm cache clean --force
 COPY --from=builder /app/dist ./dist
-USER node
+# USER node  # Commented out to run as root for Docker socket access (like Portainer agent)
 ENV NODE_ENV=production
 CMD ["node", "dist/index.js"]
 
