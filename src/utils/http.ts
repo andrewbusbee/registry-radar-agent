@@ -75,7 +75,7 @@ export async function makeHttpRequest<T = any>(
 
 // Health check function
 export async function checkHealth(serverUrl: string): Promise<void> {
-  const url = new URL("/api/health", serverUrl).toString();
+  const url = new URL("/api/agent/health", serverUrl).toString();
   
   while (true) {
     try {
