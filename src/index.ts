@@ -1,8 +1,8 @@
 import { enroll } from "./enroll";
 import { getAccessTokenWithRefresh } from "./auth";
-import { connectWs } from "./ws";
 import { startDockerWatch } from "./docker";
 import { checkHealth } from "./utils/http";
+import { startHeartbeat } from "./heartbeat";
 
 async function main() {
   const serverUrl = process.env.SERVER_URL || "";
@@ -41,8 +41,8 @@ async function main() {
   console.log("[agent] starting Docker event monitoring");
   startDockerWatch();
 
-  console.log("[agent] establishing WebSocket connection...");
-  await connectWs({ serverUrl, accessToken: access.accessToken, agentId });
+  console.log("[agent] starting heartbeat service...");
+  await startHeartbeat({ serverUrl, accessToken: access.accessToken, agentId });
 }
 
 main().catch((err) => {
